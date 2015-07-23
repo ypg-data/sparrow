@@ -16,6 +16,8 @@
 
 package com.mediative.sparrow
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.scalatest._
@@ -61,6 +63,27 @@ class DateTimeOptionsSpec extends FreeSpec {
     ))
   }
 
+  case class TimeStampHolder(
+    name: String,
+    time: Timestamp)
+
+  object TimeStampHolder {
+    implicit val schema = (
+      field[String]("name") and
+      field[Timestamp]("time")
+    )(apply _)
+  }
+
+  val tpeFromLong: Tpe[TimeStampHolder] = StructType(List(
+    StructField("name", StringType, nullable = false),
+    StructField("time", LongType, nullable = false)
+  ))
+
+  val tpeFromTimestamp: Tpe[TimeStampHolder] = StructType(List(
+    StructField("name", StringType, nullable = false),
+    StructField("time", TimestampType, nullable = false)
+  ))
+
   "DateTimeRowConverter" - {
     "should allow define a custom date format for DateTime fields" in {
       test(Row("Hello", "25/12/2015 14:40:00"), DateTimeHolder("Hello", DateTime.parse("2015-12-25T14:40:00.00")))
@@ -74,6 +97,31 @@ class DateTimeOptionsSpec extends FreeSpec {
 
     "should allow define a custom date format for LocalDate fields" in {
       test(Row("Hello", "25/12/2015"), LocalDateHolder("Hello", LocalDate.parse("2015-12-25")))
+    }
+
+    "should convert long timestamp to sql timestamps." in {
+      implicit val _ = tpeFromLong
+      val now = System.currentTimeMillis
+      test(Row("Hello", now), TimeStampHolder("Hello", new Timestamp(now)))
+    }
+
+    "should support the timestamp type of Spark to a sql timestamp." in {
+      implicit val _ = tpeFromTimestamp
+      val now = new Timestamp(System.currentTimeMillis)
+      pendingUntilFixed {
+        test(Row("Hello", now), TimeStampHolder("Hello", now))
+      }
+    }
+
+    "should support the timestamp type of Spark to a joda time DateTime." in {
+      implicit val _: Tpe[DateTimeHolder] = StructType(List(
+        StructField("name", StringType, nullable = false),
+        StructField("dateTime", StringType, nullable = false)
+      ))
+      val now = DateTime.now
+      pendingUntilFixed {
+        test(Row("Hello", new Timestamp(now.getMillis)), DateTimeHolder("Hello", now))
+      }
     }
   }
 }
