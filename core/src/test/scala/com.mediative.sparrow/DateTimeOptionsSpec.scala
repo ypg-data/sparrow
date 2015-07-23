@@ -108,20 +108,7 @@ class DateTimeOptionsSpec extends FreeSpec {
     "should support the timestamp type of Spark to a sql timestamp." in {
       implicit val _ = tpeFromTimestamp
       val now = new Timestamp(System.currentTimeMillis)
-      pendingUntilFixed {
-        test(Row("Hello", now), TimeStampHolder("Hello", now))
-      }
-    }
-
-    "should support the timestamp type of Spark to a joda time DateTime." in {
-      implicit val _: Tpe[DateTimeHolder] = StructType(List(
-        StructField("name", StringType, nullable = false),
-        StructField("dateTime", StringType, nullable = false)
-      ))
-      val now = DateTime.now
-      pendingUntilFixed {
-        test(Row("Hello", new Timestamp(now.getMillis)), DateTimeHolder("Hello", now))
-      }
+      test(Row("Hello", now), TimeStampHolder("Hello", now))
     }
   }
 }
