@@ -16,6 +16,8 @@
 
 package com.mediative.sparrow
 
+import java.sql.Timestamp
+
 import scala.util.control.NonFatal
 import scala.math.BigDecimal
 
@@ -78,22 +80,35 @@ object FieldConverter {
     }
   }
 
-  implicit def stringConverter: FieldConverter[String] = FieldConverter.simple(StringType, _.getString(_))
-  implicit def intConverter: FieldConverter[Int] = FieldConverter.simple(IntegerType, _.getInt(_))
-  implicit def longConverter: FieldConverter[Long] = FieldConverter.simple(LongType, _.getLong(_))
-  implicit def doubleConverter: FieldConverter[Double] = FieldConverter.simple(DoubleType, _.getDouble(_))
-  implicit def bigDecimalConverter: FieldConverter[BigDecimal] = FieldConverter.simple(DecimalType.Unlimited, _.getDecimal(_))
-  implicit def bigIntConverter: FieldConverter[BigInt] = FieldConverter.reader[BigDecimal].map(_.toBigInt)
+  def converterSwitch[T](types: (DataType, FieldConverter[T])*): FieldConverter[T] = new FieldConverter[T] {
+    val typeMap = Map(types: _*)
+    override def apply(struct: NamedStruct): V[(Row) => T] = {
+      val dataType = struct.field.dataType
+      typeMap.get(dataType).map(_.apply(struct)) getOrElse {
+        s"The field '${struct.name}' is of type $dataType, one of ${typeMap.keys} expected.".failureNel
+      }
+    }
+  }
 
-  implicit def localDateConverter: FieldConverter[LocalDate] = stringConverter.map(LocalDate.parse)
-  implicit def dateTimeConverter: FieldConverter[DateTime] = stringConverter.map(DateTime.parse)
+  implicit val stringConverter: FieldConverter[String] = simple(StringType, _.getString(_))
+  implicit val intConverter: FieldConverter[Int] = simple(IntegerType, _.getInt(_))
+  implicit val longConverter: FieldConverter[Long] = simple(LongType, _.getLong(_))
+  implicit val doubleConverter: FieldConverter[Double] = simple(DoubleType, _.getDouble(_))
+  implicit val bigDecimalConverter: FieldConverter[BigDecimal] = simple(DecimalType.Unlimited, _.getDecimal(_))
+  implicit val bigIntConverter: FieldConverter[BigInt] = reader[BigDecimal].map(_.toBigInt)
+
+  implicit val dateTimeConverter: FieldConverter[DateTime] = convert(DateTime.parse)
+  implicit val localDateConverter: FieldConverter[LocalDate] = convert(LocalDate.parse)
   implicit def dateTimeConverterFromString(pattern: String): FieldConverter[DateTime] = DatePattern(pattern)
   implicit def dateTimeConverterFromFmt(fmt: DateTimeFormatter): FieldConverter[DateTime] = DatePattern(fmt)
   implicit def localDateConverterFromString(pattern: String): FieldConverter[LocalDate] = DatePattern(pattern)
   implicit def localDateConverterFromFmt(fmt: DateTimeFormatter): FieldConverter[LocalDate] = DatePattern(fmt)
 
-  import java.sql.Timestamp
-  implicit def timestampConverter: FieldConverter[Timestamp] = longConverter.map(new Timestamp(_))
+  val simpleTimestampConverter = simple(TimestampType, _.getAs[Timestamp](_))
+  implicit def timestampConverter: FieldConverter[Timestamp] = converterSwitch(
+    LongType -> convert(new Timestamp(_: Long)),
+    TimestampType -> simpleTimestampConverter
+  )
 
   implicit def optionConverter[T](implicit fc: FieldConverter[T]): FieldConverter[Option[T]] =
     new FieldConverter[Option[T]] {
